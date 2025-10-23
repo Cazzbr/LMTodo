@@ -11,7 +11,9 @@ class TodoConfigParser:
             "y": "100"
         },
         "General": {
-            "db_path": "todo.db"
+            "db_path": "todo.db",
+            "default_project": "All Projects",
+            "default_filter": "Open"
         },
         "Shortcuts": {
             "add_project": "Ctrl+A",

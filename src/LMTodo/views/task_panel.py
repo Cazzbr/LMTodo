@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QFrame, QListWidgetItem
 from PySide6.QtCore import QDate
-from src.views.widgets import BubbleWidget, TaskBubble, TaskWidget, TaskFilterWidget
-from src.views.translations import translate
+from views.widgets import BubbleWidget, TaskBubble, TaskWidget, TaskFilterWidget
+from views.translations import translate
 
 from models.qthread_helper import ThreadRunner
 from controllers import todo_controller

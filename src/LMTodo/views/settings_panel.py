@@ -1,9 +1,12 @@
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QHBoxLayout, QSpacerItem, QSizePolicy, QLineEdit, QScrollArea, QWidget
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QHBoxLayout, QSpacerItem, QSizePolicy, QLineEdit, QScrollArea, QWidget, QComboBox
+from PySide6.QtGui import QKeySequence
 from PySide6.QtCore import Qt
 import shutil
 import os
 
+from views.widgets import BubbleWidget
 from controllers.todo_controller import update_db_path, init_db
+from views.translations import translate
 
 class SettingsPanel(QFrame):
 
@@ -30,10 +33,106 @@ class SettingsPanel(QFrame):
         scroll_layout.setSpacing(30)
 
         # Title
-        title_label = QLabel("Settings")
+        title_label = QLabel(translate("Settings"))
         title_label.setAlignment(Qt.AlignCenter)  # Center the title
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         scroll_layout.addWidget(title_label)
+
+        # Default Language Selection
+        language_layout = QHBoxLayout()
+        language_label = QLabel(translate("Default Language:"))
+        language_label.setStyleSheet(self._get_subtitle_style())
+        language_layout.addWidget(language_label)
+        # push combo to the right by adding stretch before it
+        language_layout.addStretch()
+
+        self.language_combo = QComboBox()
+        # Add translated display items but store untranslated values in config
+        lang_options = ["System Default", "English", "Brazilian Portuguese"]
+        for opt in lang_options:
+            self.language_combo.addItem(translate(opt), opt)
+        # Set current value from config if available (allow stored untranslated or translated)
+        current_lang = self.config_parser.get("General", "default_language", fallback="System Default")
+        # Try to find by stored untranslated value in the userData, otherwise by displayed text
+        found = False
+        for i in range(self.language_combo.count()):
+            if self.language_combo.itemData(i) == current_lang or self.language_combo.itemText(i) == current_lang:
+                self.language_combo.setCurrentIndex(i)
+                found = True
+                break
+        if not found:
+            # default to system default
+            self.language_combo.setCurrentIndex(0)
+        self.language_combo.currentTextChanged.connect(self.update_default_language)
+        language_layout.addWidget(self.language_combo)
+        scroll_layout.addLayout(language_layout)
+
+        # Default Project Selection
+        project_layout = QHBoxLayout()
+        project_label = QLabel(translate("Default Project:"))
+        project_label.setStyleSheet(self._get_subtitle_style())
+        project_layout.addWidget(project_label)
+        # push combo to the right
+        project_layout.addStretch()
+
+        self.default_project_combo = QComboBox()
+        # will be populated when settings panel is shown; include translated 'All Projects'
+        all_projects_label = translate("All Projects")
+        self.default_project_combo.addItem(all_projects_label, "All Projects")
+        # set saved value if present (try matching stored value or translated label)
+        saved_project = self.config_parser.get("General", "default_project", fallback="All Projects")
+        # If saved_project equals the untranslated key, select it; otherwise try to match displayed text
+        if saved_project == "All Projects":
+            self.default_project_combo.setCurrentIndex(0)
+        else:
+            # try to match displayed text
+            idx = self.default_project_combo.findText(saved_project)
+            if idx != -1:
+                self.default_project_combo.setCurrentIndex(idx)
+            else:
+                # fallback to first
+                self.default_project_combo.setCurrentIndex(0)
+        self.default_project_combo.currentTextChanged.connect(self.update_default_project)
+        project_layout.addWidget(self.default_project_combo)
+        scroll_layout.addLayout(project_layout)
+
+        # Default Task Filter Selection
+        filter_layout = QHBoxLayout()
+        filter_label = QLabel(translate("Default Task Filter:"))
+        filter_label.setStyleSheet(self._get_subtitle_style())
+        filter_layout.addWidget(filter_label)
+        filter_layout.addStretch()
+
+        self.default_filter_combo = QComboBox()
+        filter_options = ["All", "On Time", "Overdue", "Open", "Finished", "Cancelled"]
+        for f in filter_options:
+            self.default_filter_combo.addItem(translate(f), f)
+        saved_filter = self.config_parser.get("General", "default_filter", fallback=self.config_parser.DEFAULTS["General"].get("default_filter", "Open"))
+        # Match saved canonical value or displayed text
+        found = False
+        for i in range(self.default_filter_combo.count()):
+            if self.default_filter_combo.itemData(i) == saved_filter or self.default_filter_combo.itemText(i) == saved_filter:
+                self.default_filter_combo.setCurrentIndex(i)
+                found = True
+                break
+        if not found:
+            self.default_filter_combo.setCurrentIndex(self.default_filter_combo.findData("Open"))
+
+        def on_default_filter_changed(text):
+            idx = self.default_filter_combo.currentIndex()
+            key = self.default_filter_combo.itemData(idx) or text
+            self.config_parser.set("General", "default_filter", key)
+            self.config_parser.save()
+            # Apply immediately if parent exists
+            if self._parent and hasattr(self._parent, 'task_panel') and hasattr(self._parent.task_panel, 'filter_widget'):
+                try:
+                    self._parent.task_panel.filter_widget.set_default_filter(key)
+                except Exception:
+                    pass
+
+        self.default_filter_combo.currentTextChanged.connect(on_default_filter_changed)
+        filter_layout.addWidget(self.default_filter_combo)
+        scroll_layout.addLayout(filter_layout)
 
         scroll_layout.addLayout(self.get_db_location_layout())
         scroll_layout.addLayout(self.get_shortcut_config_layout())
@@ -45,6 +144,44 @@ class SettingsPanel(QFrame):
         main_layout.addWidget(scroll_area)
 
         self.setLayout(main_layout)
+    
+    def update_default_language(self, lang):
+        # Save the selected language to config
+        lang = self.language_combo.itemData(self.language_combo.findText(lang))
+        self.config_parser.set("General", "default_language", lang)
+        self.config_parser.save()
+        # Show bubble notification
+        
+        bubble = BubbleWidget(self, "The language will change only after you restart the app.", "OK", self.language_combo, show_input=False)
+        bubble.action_btn.clicked.connect(bubble.close)
+        bubble.show()
+
+    def update_default_project(self, project_name):
+        # Save the selected default project to config
+        self.config_parser.set("General", "default_project", project_name)
+        self.config_parser.save()
+
+    def showEvent(self, event):
+        # Populate default project combo with current project list when settings panel is shown
+        try:
+            if self._parent and hasattr(self._parent, 'projects'):
+                current_projects = [name for (_id, name) in getattr(self._parent, 'projects', [])]
+                # Clear but keep 'All Projects'
+                current_text = self.default_project_combo.currentText()
+                self.default_project_combo.blockSignals(True)
+                self.default_project_combo.clear()
+                self.default_project_combo.addItem(translate("All Projects"), "All Projetcs")
+                for name in current_projects:
+                    self.default_project_combo.addItem(name, name)
+                # restore selection if present
+                idx = self.default_project_combo.findText(self.config_parser.get("General", "default_project", fallback="All Projects"))
+                if idx != -1:
+                    self.default_project_combo.setCurrentIndex(idx)
+                else:
+                    self.default_project_combo.setCurrentText(translate("All Projects"))
+                self.default_project_combo.blockSignals(False)
+        except Exception:
+            pass
 
     def get_db_location_layout(self):
         layout = QVBoxLayout()
@@ -52,16 +189,17 @@ class SettingsPanel(QFrame):
 
         # Current DB Path Section
         db_path_layout = QHBoxLayout()
-        db_path_label = QLabel("Current Database Path:")
+        db_path_label = QLabel(translate("Database Path:"))
         db_path_label.setStyleSheet(self._get_subtitle_style())
 
         db_path_layout.addWidget(db_path_label)
-        db_path_layout.addSpacing(50)
+        # db_path_layout.addSpacing(50)
+        # push the change button to the right
+        db_path_layout.addStretch()
         # Change DB Location Button
-        self.change_db_btn = QPushButton("Change")
+        self.change_db_btn = QPushButton(translate("Change"))
         self.change_db_btn.clicked.connect(self.change_db_location)
         db_path_layout.addWidget(self.change_db_btn)
-        db_path_layout.addStretch()
         layout.addLayout(db_path_layout)
 
         # Current DB Path Display
@@ -78,46 +216,48 @@ class SettingsPanel(QFrame):
         layout.setSpacing(15)
 
         # Shortcut Configuration Section
-        shortcut_label = QLabel("Shortcut Configuration:")
+        shortcut_label = QLabel(translate("Shortcut Configuration:"))
         shortcut_label.setStyleSheet(self._get_subtitle_style())
         layout.addWidget(shortcut_label)
 
         shortcuts = self.config_parser.DEFAULTS["Shortcuts"]
 
         # Shortcut for Add Project Button
-        layout.addLayout(self._create_shortcut_row("Add Project Shortcut:", "add_project", shortcuts["add_project"]))
+        layout.addLayout(self._create_shortcut_row(translate("Add Project Shortcut:"), "add_project", shortcuts["add_project"]))
         # Shortcut for Edit Project Button
-        layout.addLayout(self._create_shortcut_row("Edit Project Shortcut:", "edit_project", shortcuts["edit_project"]))
+        layout.addLayout(self._create_shortcut_row(translate("Edit Project Shortcut:"), "edit_project", shortcuts["edit_project"]))
         # Shortcut for Delete Project Button
-        layout.addLayout(self._create_shortcut_row("Delete Project Shortcut:", "delete_project", shortcuts["delete_project"]))
+        layout.addLayout(self._create_shortcut_row(translate("Delete Project Shortcut:"), "delete_project", shortcuts["delete_project"]))
         # Shortcut for Add Task Button
-        layout.addLayout(self._create_shortcut_row("Add Task Shortcut:", "add_task", shortcuts["add_task"]))
+        layout.addLayout(self._create_shortcut_row(translate("Add Task Shortcut:"), "add_task", shortcuts["add_task"]))
         # Shortcut for Edit Task Button
-        layout.addLayout(self._create_shortcut_row("Edit Task Shortcut:", "edit_task", shortcuts["edit_task"]))
+        layout.addLayout(self._create_shortcut_row(translate("Edit Task Shortcut:"), "edit_task", shortcuts["edit_task"]))
         # Shortcut for Remove Task Button
-        layout.addLayout(self._create_shortcut_row("Remove Task Shortcut:", "remove_task", shortcuts["remove_task"]))
+        layout.addLayout(self._create_shortcut_row(translate("Remove Task Shortcut:"), "remove_task", shortcuts["remove_task"]))
         # Shortcut for Mark Completed Button
-        layout.addLayout(self._create_shortcut_row("Mark Completed Shortcut:", "mark_completed", shortcuts["mark_completed"]))
+        layout.addLayout(self._create_shortcut_row(translate("Mark Completed Shortcut:"), "mark_completed", shortcuts["mark_completed"]))
         # Shortcut for Mark Canceled Button
-        layout.addLayout(self._create_shortcut_row("Mark Canceled Shortcut:", "mark_canceled", shortcuts["mark_canceled"]))
+        layout.addLayout(self._create_shortcut_row(translate("Mark Canceled Shortcut:"), "mark_canceled", shortcuts["mark_canceled"]))
         # Shortcut for All Projects Button
-        layout.addLayout(self._create_shortcut_row("All Projects Shortcut:", "all_projects", shortcuts["all_projects"]))
+        layout.addLayout(self._create_shortcut_row(translate("All Projects Shortcut:"), "all_projects", shortcuts["all_projects"]))
         # Shortcut for Config Panel Button
-        layout.addLayout(self._create_shortcut_row("Config Panel Shortcut:", "config_panel", shortcuts["config_panel"]))
+        layout.addLayout(self._create_shortcut_row(translate("Config Panel Shortcut:"), "config_panel", shortcuts["config_panel"]))
         # Shortcut for Filter Buttons
-        layout.addLayout(self._create_shortcut_row("Filter All Shortcut:", "filter_all", shortcuts["filter_all"]))
-        layout.addLayout(self._create_shortcut_row("On-Time Shortcut:", "on_time", shortcuts["on_time"]))
-        layout.addLayout(self._create_shortcut_row("Overdue Shortcut:", "overdue", shortcuts["overdue"]))
-        layout.addLayout(self._create_shortcut_row("Filter Active Shortcut:", "filter_active", shortcuts["filter_active"]))
-        layout.addLayout(self._create_shortcut_row("Filter Completed Shortcut:", "filter_completed", shortcuts["filter_completed"]))
-        layout.addLayout(self._create_shortcut_row("Filter Canceled Shortcut:", "filter_canceled", shortcuts["filter_canceled"]))
+        layout.addLayout(self._create_shortcut_row(translate("Filter All Shortcut:"), "filter_all", shortcuts["filter_all"]))
+        layout.addLayout(self._create_shortcut_row(translate("On-Time Shortcut:"), "on_time", shortcuts["on_time"]))
+        layout.addLayout(self._create_shortcut_row(translate("Overdue Shortcut:"), "overdue", shortcuts["overdue"]))
+        layout.addLayout(self._create_shortcut_row(translate("Filter Active Shortcut:"), "filter_active", shortcuts["filter_active"]))
+        layout.addLayout(self._create_shortcut_row(translate("Filter Completed Shortcut:"), "filter_completed", shortcuts["filter_completed"]))
+        layout.addLayout(self._create_shortcut_row(translate("Filter Canceled Shortcut:"), "filter_canceled", shortcuts["filter_canceled"]))
         # Selection shortcuts
-        layout.addLayout(self._create_shortcut_row("Select Project Shortcut:", "select_project", shortcuts["select_project"]))
-        layout.addLayout(self._create_shortcut_row("Select Tasks Shortcut:", "select_tasks", shortcuts["select_tasks"]))
+        layout.addLayout(self._create_shortcut_row(translate("Select Project Shortcut:"), "select_project", shortcuts["select_project"]))
+        layout.addLayout(self._create_shortcut_row(translate("Select Tasks Shortcut:"), "select_tasks", shortcuts["select_tasks"]))
 
         return layout
 
     def _create_shortcut_row(self, label_text, action, default_shortcut):
+        # Use a vertical layout so we can show inline error messages under the row
+        container_layout = QVBoxLayout()
         row_layout = QHBoxLayout()
         row_layout.setSpacing(10)
 
@@ -129,13 +269,54 @@ class SettingsPanel(QFrame):
         shortcut_input.setStyleSheet(
             "font-size: 14px; border: 1px solid #ccc; border-radius: 4px;"
         )
-        shortcut_input.textChanged.connect(lambda: self.update_shortcut(action, shortcut_input.text()))
+
+        # Inline error label
+        error_label = QLabel("")
+        error_label.setStyleSheet("color: #e57373; font-size: 12px;")
+        error_label.setVisible(False)
+
+        def on_shortcut_changed():
+            new_val = shortcut_input.text().strip()
+
+            # Empty is invalid
+            if not new_val:
+                error_label.setText(translate("Shortcut cannot be empty."))
+                error_label.setVisible(True)
+                return
+
+            # Validate format using QKeySequence
+            seq = QKeySequence(new_val)
+            if not seq.toString().strip():
+                error_label.setText(translate("Invalid shortcut format."))
+                error_label.setVisible(True)
+                return
+
+            # Check if the shortcut is already used by another action
+            current_shortcuts = self.config_parser.get_shortcuts()
+            for act, s in current_shortcuts.items():
+                if act == action:
+                    continue
+                if s and s.strip() and s == new_val:
+                    # show which action uses it
+                    # Use the translation with the action name interpolated
+                    error_label.setText(translate("Shortcut already used by '{act}'.").format(act=act))
+                    error_label.setVisible(True)
+                    return
+
+            # All good: clear error and propagate change
+            error_label.setVisible(False)
+            self.update_shortcut(action, new_val)
+
+        shortcut_input.textChanged.connect(on_shortcut_changed)
 
         row_layout.addWidget(shortcut_label)
         row_layout.addWidget(shortcut_input)
         row_layout.addStretch()
 
-        return row_layout
+        container_layout.addLayout(row_layout)
+        container_layout.addWidget(error_label)
+
+        return container_layout
 
     def update_shortcut(self, action, new_shortcut):
         """Update a shortcut and notify the main window to apply the change."""
@@ -156,9 +337,8 @@ class SettingsPanel(QFrame):
                 # Ask the user if they want to move the current database
                 reply = QMessageBox.question(
                     self,
-                    "Move Database",
-                    "Do you want to move the current database to the new location?\n\n"
-                    "Warning: If you press 'No', a new database will be created at the new location, and all current information will be unavailable.",
+                    translate("Move Database"),
+                    translate("Do you want to move the current database to the new location?\n\n") + translate("Warning: If you press 'No', a new database will be created at the new location, and all current information will be unavailable."),
                     QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
                 )
 
@@ -170,7 +350,7 @@ class SettingsPanel(QFrame):
                         shutil.move(current_db_path, new_path)
                         update_db_path(new_path)
                     except Exception as e:
-                        QMessageBox.critical(self, "Error", f"Failed to move database: {e}")
+                        QMessageBox.critical(self, translate("Error"), f"{translate('Failed to move database')}: {e}")
                         return
                 if reply == QMessageBox.No:
                     init_db(new_path)
@@ -180,4 +360,4 @@ class SettingsPanel(QFrame):
             self.db_path_value_label.setText(new_path)  # Update the label
             self.db_path_value_label.setToolTip(new_path)  # Update the tooltip
             self._parent.load_projects()
-            QMessageBox.information(self, "Success", "Database location updated successfully.")
+            QMessageBox.information(self, translate("Success"), translate("Database location updated successfully."))

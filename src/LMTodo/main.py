@@ -2,10 +2,10 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, Q
 from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QShortcut
 from PySide6.QtCore import QRect
 
-from src.views.widgets import BubbleWidget
+from views.widgets import BubbleWidget
 from views.task_panel import TaskPanel
-from src.views.translations import translate
-from src.views.settings_panel import SettingsPanel
+from views.translations import translate
+from views.settings_panel import SettingsPanel
 
 import sys
 
@@ -25,8 +25,8 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Set the application icon
-        app_icon_path = "include/clipboard-check.svg"
-        self.setWindowIcon(QIcon(app_icon_path))
+        #app_icon_path = "include/clipboard-check.svg"
+        #self.setWindowIcon(QIcon(app_icon_path))
 
         self.setWindowTitle(translate("Todo App"))
 
@@ -137,6 +137,22 @@ class MainWindow(QMainWindow):
                 if pid == prev_project_id:
                     self.project_list.setCurrentRow(index)
                     break
+
+        # If there's no previous selection, try to apply configured default project
+        if prev_project_id is None:
+            default_project_name = self.configs.get("General", "default_project", fallback=self.configs.DEFAULTS["General"].get("default_project", "All Projects"))
+            if default_project_name and default_project_name != "All Projects":
+                # find project by name
+                found = False
+                for index, (_pid, name) in enumerate(self.projects):
+                    if name == default_project_name:
+                        self.project_list.setCurrentRow(index)
+                        found = True
+                        break
+                if not found:
+                    # fallback to All Projects and save fallback
+                    self.configs.set("General", "default_project", "All Projects")
+                    self.configs.save()
 
         self.set_projects_buttons_state()
         self.task_panel.load_tasks()
@@ -254,9 +270,64 @@ class MainWindow(QMainWindow):
         self.select_tasks_shortcut.activated.connect(self.task_panel.task_list.setFocus)
 
     def update_shortcut(self, action, new_shortcut):
-        """Update a specific shortcut in the configuration and apply it."""
+        """Update a specific shortcut in the configuration and apply it.
+
+        Only the affected shortcut/widget is updated to avoid clobbering
+        or reapplying all shortcuts when a single one changes.
+        """
+        # Persist the change
         self.configs.set("Shortcuts", action, new_shortcut)
-        self.set_shortcuts()
+        self.configs.save()
+
+        # Apply the updated shortcut to the corresponding widget
+        try:
+            if action == "add_project":
+                self.add_project_btn.setShortcut(new_shortcut)
+            elif action == "edit_project":
+                self.edit_project_btn.setShortcut(new_shortcut)
+            elif action == "delete_project":
+                self.delete_project_btn.setShortcut(new_shortcut)
+            elif action == "add_task":
+                self.task_panel.add_task_btn.setShortcut(new_shortcut)
+            elif action == "edit_task":
+                self.task_panel.edit_task_btn.setShortcut(new_shortcut)
+            elif action == "remove_task":
+                self.task_panel.delete_task_btn.setShortcut(new_shortcut)
+            elif action == "mark_completed":
+                self.task_panel.complete_task_btn.setShortcut(new_shortcut)
+            elif action == "mark_canceled":
+                self.task_panel.cancel_task_btn.setShortcut(new_shortcut)
+            elif action == "all_projects":
+                self.all_projects_btn.setShortcut(new_shortcut)
+            elif action == "config_panel":
+                self.config_btn.setShortcut(new_shortcut)
+            elif action == "filter_all":
+                self.task_panel.filter_widget.buttons['All'].setShortcut(new_shortcut)
+            elif action == "on_time":
+                self.task_panel.filter_widget.buttons['On Time'].setShortcut(new_shortcut)
+            elif action == "overdue":
+                self.task_panel.filter_widget.buttons['Overdue'].setShortcut(new_shortcut)
+            elif action == "filter_active":
+                self.task_panel.filter_widget.buttons['Open'].setShortcut(new_shortcut)
+            elif action == "filter_completed":
+                self.task_panel.filter_widget.buttons['Finished'].setShortcut(new_shortcut)
+            elif action == "filter_canceled":
+                self.task_panel.filter_widget.buttons['Cancelled'].setShortcut(new_shortcut)
+            elif action == "select_project":
+                if hasattr(self, 'select_projects_shortcut') and self.select_projects_shortcut:
+                    self.select_projects_shortcut.setKey(QKeySequence(new_shortcut))
+                else:
+                    self.select_projects_shortcut = QShortcut(QKeySequence(new_shortcut), self)
+                    self.select_projects_shortcut.activated.connect(self.project_list.setFocus)
+            elif action == "select_tasks":
+                if hasattr(self, 'select_tasks_shortcut') and self.select_tasks_shortcut:
+                    self.select_tasks_shortcut.setKey(QKeySequence(new_shortcut))
+                else:
+                    self.select_tasks_shortcut = QShortcut(QKeySequence(new_shortcut), self)
+                    self.select_tasks_shortcut.activated.connect(self.task_panel.task_list.setFocus)
+        except Exception:
+            # Fallback: reapply all shortcuts if something goes wrong
+            self.set_shortcuts()
 
     def closeEvent(self, event):
         """Save the current window position and size to the .ini file."""

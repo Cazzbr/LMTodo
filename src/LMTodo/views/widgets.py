@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QSizePolicy, QDateEdit,  QFrame
 from PySide6.QtGui import QPainter, QBrush, QColor, QPolygon, QFont
 from PySide6.QtCore import Qt, QPoint, QDate
-from src.views.translations import translate
+from views.translations import translate, get_config_parser
 
 
 class BubbleWidget(QWidget):
@@ -155,8 +155,14 @@ class TaskWidget(QWidget):
 
 class TaskFilterWidget(QWidget):
     def __init__(self, on_filter_selected):
-        self.current_filter = "All"
         super().__init__()
+        # Read configured default filter from config.ini (language-neutral canonical value)
+        try:
+            cfg = get_config_parser()
+            default_filter = cfg.get("General", "default_filter", fallback="Open")
+        except Exception:
+            default_filter = "Open"
+        self.current_filter = default_filter
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
@@ -171,9 +177,15 @@ class TaskFilterWidget(QWidget):
             layout.addWidget(button)
             self.buttons[filter_name] = button
 
-        # Set default filter to 'All'
-        self.buttons["All"].setChecked(True)
-        self.buttons["All"].setStyleSheet(self.get_button_style(True))
+        # Apply provided default filter
+        if default_filter in self.buttons:
+            self.buttons[default_filter].setChecked(True)
+            self.buttons[default_filter].setStyleSheet(self.get_button_style(True))
+        else:
+            # Fallback to Open
+            self.buttons["Open"].setChecked(True)
+            self.buttons["Open"].setStyleSheet(self.get_button_style(True))
+
         self.setLayout(layout)
 
     def on_button_clicked(self, filter_name, on_filter_selected):
