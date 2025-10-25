@@ -38,9 +38,9 @@ def add_task(description, due_date, project_id):
 		(description, due_date, None, project_id)
 	)
 
-def edit_task(task_id, name, due_date):
+def edit_task(task_id, name, due_date, project_id):
 	db = TodoDB()
-	db.persist("UPDATE tasks SET title=?, due_date=? WHERE id=?", (name, due_date, task_id))
+	db.persist("UPDATE tasks SET title=?, due_date=?, project_id=? WHERE id=?", (name, due_date, project_id, task_id))
 
 def delete_task(task_id):
 	db = TodoDB()

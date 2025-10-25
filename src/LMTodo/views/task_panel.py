@@ -7,9 +7,10 @@ from models.qthread_helper import ThreadRunner
 from controllers import todo_controller
 
 class TaskPanel(QFrame):
-    def __init__(self, get_current_project_id_func):
+    def __init__(self, get_current_project_id_func, get_projects_func=None):
         self.tasks = []
         self.get_current_project_id = get_current_project_id_func
+        self.get_projects_func = get_projects_func
 
         super().__init__()
 
@@ -140,15 +141,32 @@ class TaskPanel(QFrame):
         self.cancel_task_btn.setEnabled(is_task_selected)
 
     def add_task(self):
-        bubble = TaskBubble(self, self.add_task_btn, title=translate("Add Task"), action_text=translate("Add"))
+        # gather projects list from provided callback (list of (pid, name))
+        projects = []
+        try:
+            if callable(self.get_projects_func):
+                projects = self.get_projects_func() or []
+        except Exception:
+            projects = []
+
+        selected_pid = None
+        try:
+            selected_pid = self.get_current_project_id()
+        except Exception:
+            selected_pid = None
+
+        bubble = TaskBubble(self, self.add_task_btn, title=translate("Add Task"), action_text=translate("Add"), projects=projects, selected_project_id=selected_pid)
         btn_pos = self.add_task_btn.mapToGlobal(self.add_task_btn.rect().bottomLeft())
         bubble.move(btn_pos.x() - 10, btn_pos.y() - bubble.height() - 30)
 
         def on_add():
             desc = bubble.desc_input.text().strip()
             due = bubble.due_input.date().toString("yyyy-MM-dd")
-            # Determine selected project
-            project_id = self.get_current_project_id()  # Updated to reflect the new index logic
+            # Determine selected project (from dropdown if present)
+            if hasattr(bubble, 'project_combo') and bubble.project_combo is not None:
+                project_id = bubble.project_combo.currentData()
+            else:
+                project_id = self.get_current_project_id()
 
             if desc and project_id is not None:
                 ThreadRunner(todo_controller.add_task, self.load_tasks, desc, due, project_id).start()
@@ -167,6 +185,8 @@ class TaskPanel(QFrame):
             action_text=translate("Save"),
             initial_desc=title,
             initial_due_date=QDate.fromString(due_date, "yyyy-MM-dd"),
+            projects=(self.get_projects_func() if callable(self.get_projects_func) else None),
+            selected_project_id=project_id,
         )
         btn_pos = self.edit_task_btn.mapToGlobal(self.edit_task_btn.rect().bottomLeft())
         bubble.move(btn_pos.x() - 10, btn_pos.y() - bubble.height() - 30)
@@ -175,7 +195,7 @@ class TaskPanel(QFrame):
             desc = bubble.desc_input.text().strip()
             due = bubble.due_input.date().toString("yyyy-MM-dd")
             if desc:
-                ThreadRunner(todo_controller.edit_task, self.load_tasks, task_id, desc, due).start()
+                ThreadRunner(todo_controller.edit_task, self.load_tasks, task_id, desc, due, bubble.project_combo.currentData()).start()
             bubble.close()
 
         bubble.action_btn.clicked.connect(on_save)

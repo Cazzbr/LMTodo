@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         self.project_panel.setLayout(project_layout)
         self.main_layout.addWidget(self.project_panel)
         # Right panel: Tasks (expands dynamically)
-        self.task_panel = TaskPanel(self.get_current_project_id)
+        self.task_panel = TaskPanel(self.get_current_project_id, self.get_projects)
         self.main_layout.addWidget(self.task_panel, stretch=1)
 
         # Create the configuration panel with animation
@@ -185,6 +185,12 @@ class MainWindow(QMainWindow):
         if self.project_list.selectedIndexes():
             return self.projects[self.project_list.currentRow()][0]
         return None
+
+    def get_projects(self):
+        """Return the current list of projects as (pid, name) tuples.
+        Used by TaskPanel to populate project-selection dropdowns.
+        """
+        return getattr(self, 'projects', [])
 
     def add_project(self):
         bubble = BubbleWidget(self, translate("Enter project name:"), translate("Add"), self.add_project_btn)

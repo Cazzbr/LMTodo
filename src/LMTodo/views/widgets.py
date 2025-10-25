@@ -7,12 +7,12 @@ from models.parser import get_config_parser
 
 class BubbleWidget(QWidget):
     
-    def __init__(self, parent, label_text, button_text, anchor_btn, initial_text="", show_input=True, cancel_text=None, warning_text=None):
+    def __init__(self, parent, label_text, button_text, anchor_btn, initial_text="", show_input=True, cancel_text=None, warning_text=None, minWidth=240, minHeight=170):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumWidth(240)
-        self.setMinimumHeight(170)
+        self.setMinimumWidth(minWidth)
+        self.setMinimumHeight(minHeight)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         self.anchor_btn = anchor_btn
         layout = QVBoxLayout(self)
@@ -34,13 +34,14 @@ class BubbleWidget(QWidget):
             layout.addWidget(self.name_input)
         self.action_btn = QPushButton(translate(button_text))
         self.action_btn.setStyleSheet("background: #c00; color: #fff; border-radius: 6px; padding: 4px 12px;")
-        btn_row = QHBoxLayout()
-        btn_row.addWidget(self.action_btn)
+        # Expose the button row so subclasses (like TaskBubble) can add widgets to the same row
+        self.btn_row = QHBoxLayout()
+        self.btn_row.addWidget(self.action_btn)
         if cancel_text:
             self.cancel_btn = QPushButton(translate(cancel_text))
             self.cancel_btn.setStyleSheet("background: #444; color: #f0f0f0; border-radius: 6px; padding: 4px 12px;")
-            btn_row.addWidget(self.cancel_btn)
-        layout.addLayout(btn_row)
+            self.btn_row.addWidget(self.cancel_btn)
+        layout.addLayout(self.btn_row)
         layout.addStretch(1)
         if show_input:
             self.name_input.returnPressed.connect(self.action_btn.click)
@@ -72,22 +73,36 @@ class BubbleWidget(QWidget):
         self.name_input.setFocus()
 
 class TaskBubble(BubbleWidget):
-    def __init__(self, parent, anchor_btn, title="Add Task", action_text="Add", initial_desc="", initial_due_date=None):
-        super().__init__(parent, title, action_text, anchor_btn, show_input=False)
-
+    def __init__(self, parent, anchor_btn, title="Add Task", action_text="Add", initial_desc="", initial_due_date=None, projects=None, selected_project_id=None):
+        super().__init__(parent, title, action_text, anchor_btn, show_input=False, minWidth=550)
         # Task description input
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText(translate("Task description"))
         self.desc_input.setText(initial_desc)
         self.desc_input.setStyleSheet("background: #222; color: #f0f0f0; border-radius: 6px; padding: 4px 8px;")
+        self.desc_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.layout().insertWidget(1, self.desc_input)
-
         # Due date input
         self.due_input = QDateEdit()
         self.due_input.setCalendarPopup(True)
         self.due_input.setDate(initial_due_date or QDate.currentDate())
         self.due_input.setStyleSheet("background: #222; color: #f0f0f0; border-radius: 6px; padding: 4px 8px;")
-        self.layout().insertWidget(2, self.due_input)
+        self.due_input.setMaximumWidth(140)
+        self.btn_row.insertWidget(0, self.due_input)
+        # Projects
+        self.project_combo = QComboBox()
+        self.project_combo.setMinimumWidth(150)
+        if projects:
+            for pid, name in projects:
+                self.project_combo.addItem(name, pid)
+            # select the provided project id, or fallback to first
+            if selected_project_id is not None:
+                idx = self.project_combo.findData(selected_project_id)
+                if idx != -1:
+                    self.project_combo.setCurrentIndex(idx)
+        self.btn_row.insertWidget(1, self.project_combo)
+        # add a stretch so buttons stay to the right
+        self.btn_row.insertStretch(2, 1)
 
         # Set focus on description input
         self.desc_input.setFocus()
