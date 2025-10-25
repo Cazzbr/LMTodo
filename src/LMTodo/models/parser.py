@@ -1,5 +1,13 @@
 import configparser
 
+# Cache config parser instance
+_config_parser = None
+def get_config_parser():
+    global _config_parser
+    if _config_parser is None:
+        _config_parser = TodoConfigParser()
+    return _config_parser
+
 class TodoConfigParser:
     """Handles loading and saving configurations."""
 
@@ -13,7 +21,9 @@ class TodoConfigParser:
         "General": {
             "db_path": "todo.db",
             "default_project": "All Projects",
-            "default_filter": "Open"
+            "default_filter": "Open",
+            # Default sort method for task list on startup: creation|due|status
+            "default_sort": "creation"
         },
         "Shortcuts": {
             "add_project": "Ctrl+A",

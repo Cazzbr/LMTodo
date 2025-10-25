@@ -1,14 +1,7 @@
 import locale
-import os
-from models.parser import TodoConfigParser
+from models.parser import get_config_parser
 
-# Cache config parser instance
-_config_parser = None
-def get_config_parser():
-    global _config_parser
-    if _config_parser is None:
-        _config_parser = TodoConfigParser()
-    return _config_parser
+
 
 # Translation dictionaries
 translations = {
@@ -55,6 +48,10 @@ translations = {
         "Settings": "Settings",
         "Default Language:": "Default Language:",
         "Default Task Filter:": "Default Task Filter:",
+        "Sort by:": "Sort by:",
+        "Creation Date": "Creation Date",
+        "Due Date": "Due Date",
+        "Status": "Status",
         "Default Project:": "Default Project:",
         "Database Path:": "Database Path:",
         "Change": "Change",
@@ -136,6 +133,10 @@ translations = {
         "Settings": "Configurações",
         "Default Language:": "Idioma Padrão:",
         "Default Task Filter:": "Filtro de Tarefas Padrão:",
+        "Sort by:": "Ordenar por:",
+        "Creation Date": "Data de Criação",
+        "Due Date": "Data de Vencimento",
+        "Status": "Status",
         "Default Project:": "Projeto Padrão:",
         "Database Path:": "Caminho do Banco de Dados:",
         "Change": "Alterar",

@@ -68,12 +68,34 @@ class TaskPanel(QFrame):
         self.filtered_tasks = []  # Store filtered tasks
         for tid, title, status, creation_date, due_date, close_date, pid in self.tasks:
             if self.do_task_must_be_shown(self.get_current_project_id(), current_task_filter, tid, title, status, creation_date, due_date, close_date, pid):
-                task_widget = TaskWidget(title, status, due_date, close_date, creation_date)
-                item = QListWidgetItem()
-                item.setSizeHint(task_widget.sizeHint())
-                self.task_list.addItem(item)
-                self.task_list.setItemWidget(item, task_widget)
                 self.filtered_tasks.append((tid, title, status, creation_date, due_date, close_date, pid))
+
+        # Sort filtered_tasks according to selected sort method
+        sort_method = "creation"
+        try:
+            sort_method = self.filter_widget.get_sort_method()
+        except Exception:
+            sort_method = "creation"
+
+        if sort_method == "creation":
+            # Assuming tid (db id) is increasing with creation
+            self.filtered_tasks.sort(key=lambda t: t[0])
+        elif sort_method == "due":
+            # due_date is YYYY-MM-DD, empty or None should go last
+            def due_key(t):
+                dd = t[4] or ""
+                return (dd == "", dd)
+            self.filtered_tasks.sort(key=due_key)
+        elif sort_method == "status":
+            order = {"open": 0, "complete": 1, "cancelled": 2}
+            self.filtered_tasks.sort(key=lambda t: order.get(t[2], 99))
+
+        for tid, title, status, creation_date, due_date, close_date, pid in self.filtered_tasks:
+            task_widget = TaskWidget(title, status, due_date, close_date, creation_date)
+            item = QListWidgetItem()
+            item.setSizeHint(task_widget.sizeHint())
+            self.task_list.addItem(item)
+            self.task_list.setItemWidget(item, task_widget)
         
         # Restore last selected Task if possible
         if prev_task_id is not None:

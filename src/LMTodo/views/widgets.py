@@ -1,7 +1,8 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QSizePolicy, QDateEdit,  QFrame
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QSizePolicy, QDateEdit, QFrame, QComboBox
 from PySide6.QtGui import QPainter, QBrush, QColor, QPolygon, QFont
 from PySide6.QtCore import Qt, QPoint, QDate
-from views.translations import translate, get_config_parser
+from views.translations import translate
+from models.parser import get_config_parser
 
 
 class BubbleWidget(QWidget):
@@ -166,6 +167,24 @@ class TaskFilterWidget(QWidget):
         layout = QHBoxLayout()
         layout.setSpacing(10)
 
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItem(translate("Creation Date"), "creation")
+        self.sort_combo.addItem(translate("Due Date"), "due")
+        self.sort_combo.addItem(translate("Status"), "status")
+        layout.addWidget(self.sort_combo)
+        # Try to initialize sort combo from saved config (default_sort)
+        try:
+            cfg = get_config_parser()
+            saved_sort = cfg.get("General", "default_sort", fallback="creation")
+            idx = self.sort_combo.findData(saved_sort)
+            if idx != -1:
+                self.sort_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+
+        # Connect changes to the provided callback (reapplies filters/sort on change)
+        self.sort_combo.currentTextChanged.connect(on_filter_selected)
+
         # Filter buttons
         self.buttons: dict[str, QPushButton] = {}
         filters = ["All", "On Time", "Overdue", "Open", "Finished", "Cancelled"]
@@ -213,3 +232,8 @@ class TaskFilterWidget(QWidget):
 
     def get_current_filter(self):
         return self.current_filter
+    
+    def get_sort_method(self):
+        if self.sort_combo:
+            return self.sort_combo.currentData()
+        return "creation"  # Default sort method

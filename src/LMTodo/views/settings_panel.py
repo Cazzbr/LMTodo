@@ -134,6 +134,37 @@ class SettingsPanel(QFrame):
         filter_layout.addWidget(self.default_filter_combo)
         scroll_layout.addLayout(filter_layout)
 
+        # Default Sort Order Selection
+        sort_layout = QHBoxLayout()
+        sort_label = QLabel(translate("Sort by:"))
+        sort_label.setStyleSheet(self._get_subtitle_style())
+        sort_layout.addWidget(sort_label)
+        sort_layout.addStretch()
+
+        self.default_sort_combo = QComboBox()
+        sort_options = [(translate("Creation Date"), "creation"), (translate("Due Date"), "due"), (translate("Status"), "status")]
+        for label, data in sort_options:
+            self.default_sort_combo.addItem(label, data)
+
+        saved_sort = self.config_parser.get("General", "default_sort", fallback=self.config_parser.DEFAULTS["General"].get("default_sort", "creation"))
+        found_sort = False
+        for i in range(self.default_sort_combo.count()):
+            if self.default_sort_combo.itemData(i) == saved_sort or self.default_sort_combo.itemText(i) == saved_sort:
+                self.default_sort_combo.setCurrentIndex(i)
+                found_sort = True
+                break
+        if not found_sort:
+            # fallback to creation
+            idx = self.default_sort_combo.findData("creation")
+            if idx != -1:
+                self.default_sort_combo.setCurrentIndex(idx)
+
+        
+
+        self.default_sort_combo.currentTextChanged.connect(self.on_default_sort_changed)
+        sort_layout.addWidget(self.default_sort_combo)
+        scroll_layout.addLayout(sort_layout)
+
         scroll_layout.addLayout(self.get_db_location_layout())
         scroll_layout.addLayout(self.get_shortcut_config_layout())
 
@@ -144,6 +175,12 @@ class SettingsPanel(QFrame):
         main_layout.addWidget(scroll_area)
 
         self.setLayout(main_layout)
+
+    def on_default_sort_changed(self, text):
+        idx = self.default_sort_combo.currentIndex()
+        key = self.default_sort_combo.itemData(idx) or text
+        self.config_parser.set("General", "default_sort", key)
+        self.config_parser.save()
     
     def update_default_language(self, lang):
         # Save the selected language to config
