@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QSizePolicy, QDateEdit, QFrame, QComboBox
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QSizePolicy, QDateEdit, QFrame, QComboBox, QTextEdit
 from PySide6.QtGui import QPainter, QBrush, QColor, QPolygon, QFont
-from PySide6.QtCore import Qt, QPoint, QDate
+from PySide6.QtCore import Qt, QPoint, QDate, QRect
 from views.translations import translate
 from models.parser import get_config_parser
 
@@ -72,6 +72,7 @@ class BubbleWidget(QWidget):
         super().showEvent(event)
         self.name_input.setFocus()
 
+
 class TaskBubble(BubbleWidget):
     def __init__(self, parent, anchor_btn, title="Add Task", action_text="Add", initial_desc="", initial_due_date=None, projects=None, selected_project_id=None):
         super().__init__(parent, title, action_text, anchor_btn, show_input=False, minWidth=550)
@@ -108,16 +109,50 @@ class TaskBubble(BubbleWidget):
         self.desc_input.setFocus()
         self.desc_input.returnPressed.connect(self.action_btn.click)
 
+
+class CommentBubble(BubbleWidget):
+    def __init__(self, parent, anchor_btn, title="Comments", initial_text="", on_close=None):
+        # Use a wider and slightly shorter bubble for comments as requested
+        # Double width of previous 420 -> 840; reduce height by one third: 260 * 2/3 ~= 173
+        super().__init__(parent, title, "", anchor_btn, show_input=False, minWidth=840, minHeight=173)
+
+        # Add a multiline text edit for comments
+        self.comment_edit = QTextEdit()
+        self.comment_edit.setPlainText(initial_text or "")
+        self.comment_edit.setStyleSheet("background: #222; color: #f0f0f0; border-radius: 6px; padding: 6px;")
+        # Insert before the button row
+        self.layout().insertWidget(1, self.comment_edit)
+        self._on_close = on_close
+
+    def closeEvent(self, event):
+        # When the bubble is closed (including clicking outside), persist via callback
+        try:
+            if callable(self._on_close):
+                self._on_close(self.comment_edit.toPlainText())
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+
 class TaskWidget(QWidget):
-    def __init__(self, description, status, due_date, close_date, creation_date):
+    def __init__(self, task_id, description, status, due_date, close_date, creation_date, comments=None, on_save_comments=None):
         super().__init__()
         layout = QVBoxLayout()
 
-        # Title/Description
+        # Title/Description row with comment button at the end
+        title_row = QHBoxLayout()
         title_label = QLabel(description)
         title_label.setFont(QFont("Arial", 11, QFont.Bold))
         title_label.setStyleSheet("color: #ffffff;")
-        layout.addWidget(title_label)
+        title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        title_row.addWidget(title_label)
+
+        # Comments button (opens CommentBubble)
+        comment_btn = QPushButton("💬")
+        comment_btn.setToolTip(translate("Comments"))
+        comment_btn.setMaximumWidth(36)
+        title_row.addWidget(comment_btn)
+        layout.addLayout(title_row)
 
         # Dates and Status
         dates_status_layout = QHBoxLayout()
@@ -168,6 +203,35 @@ class TaskWidget(QWidget):
 
         self.setLayout(layout)
         self.setStyleSheet("background-color: #333333; border: 1px solid #555555; border-radius: 8px; padding: 10px;")
+        
+
+        # Wire comment button to open bubble
+        def _open_comments():
+            def _save_and_refresh(text):
+                try:
+                    if callable(on_save_comments):
+                        on_save_comments(task_id, text)
+                except Exception:
+                    pass
+
+            # Build content as a QLayout (required by BubbleWidgetV2)
+            content_layout = QVBoxLayout()
+            comment_edit = QTextEdit()
+            comment_edit.setPlainText(comments or "")
+            comment_edit.setStyleSheet("background: #222; color: #f0f0f0; border-radius: 6px; padding: 6px;")
+            content_layout.addWidget(comment_edit)
+
+            # Create the new bubble variant using the layout content. Use top-right anchor
+            # to match prior placement (bubble's top-right aligns with button top-right).
+            cb = BubbleWidgetV2(self, content_layout, comment_btn, anchor_point='top-right', minWidth=840, minHeight=173, on_close=_save_and_refresh)
+            # Ensure bubble has the requested size before computing position
+            try:
+                cb.resize(cb.minimumWidth(), cb.minimumHeight())
+            except Exception:
+                pass
+            cb.show()
+        comment_btn.clicked.connect(_open_comments)      
+
 
 class TaskFilterWidget(QWidget):
     def __init__(self, on_filter_selected):
@@ -252,3 +316,151 @@ class TaskFilterWidget(QWidget):
         if self.sort_combo:
             return self.sort_combo.currentData()
         return "creation"  # Default sort method
+
+
+class BubbleWidgetV2(QWidget):
+    """
+    BubbleWidgetV2: a flexible bubble that accepts arbitrary content and an anchor point.
+
+    Args:
+        parent: parent widget
+        content: QLayout containing the bubble contents
+        anchor_btn: widget used as anchor/reference for positioning
+        anchor_point: one of 'top-right','top-center','top-left','bottom-left','bottom-center','bottom-right'
+        minWidth/minHeight: minimum geometry for bubble
+    """
+    def __init__(self, parent, content, anchor_btn, anchor_point='bottom-right', minWidth=240, minHeight=170, on_close=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMinimumWidth(minWidth)
+        self.setMinimumHeight(minHeight)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+        self.anchor_btn = anchor_btn
+        self._anchor_point: str = anchor_point.lower()
+
+        self._tail_size = 10
+        self._tail_offset = 16
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(10)
+
+        container = QWidget()
+        container.setLayout(content)
+        main_layout.addWidget(container)
+
+        main_layout.addStretch(1)
+        # store on_close callback
+        self._on_close = on_close
+
+    def closeEvent(self, event):
+        # If an on_close callback was provided, try to extract a QTextEdit from
+        # the bubble contents and pass its text to the callback.
+        try:
+            if callable(self._on_close):
+                # find the first QTextEdit child
+                te = self.findChild(QTextEdit)
+                if te is not None:
+                    self._on_close(te.toPlainText())
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        bubble_color = QColor(40, 40, 48)
+        border_color = QColor(80, 80, 96)
+        painter.setBrush(QBrush(bubble_color))
+        painter.setPen(border_color)
+        tail_on_top = self._anchor_point.startswith('top')
+        # Reserve equal vertical space for the tail at both top and bottom so margins are symmetric.
+        # Keep left/right as-is; only push the top and bottom in by tail_size.
+        match self._anchor_point.split('-')[0]:
+            case 'top':
+                rect = self.rect().adjusted(0, self._tail_size, 0, 0)
+            case 'bottom':
+                rect = self.rect().adjusted(0, 0, 0, -self._tail_size)
+            case 'left':
+                rect = self.rect().adjusted(self._tail_size, 0, 0, 0)
+            case 'right':
+                rect = self.rect().adjusted(0, 0, -self._tail_size, 0)
+            case _:
+                rect = self.rect()
+        
+        painter.drawRoundedRect(rect, 12, 12)
+
+        target_pt = self._global_anchor_point(self._anchor_point.split('-')[0])
+
+        # Use the adjusted rect's top-left when converting to global coordinates so
+        # the arrow local_x is computed with the same coordinate space as `rect`.
+        bubble_pos = self.mapToGlobal(rect.topLeft())
+        local_x = target_pt.x() - bubble_pos.x()
+        arrow_x = max(rect.left() + self._tail_offset, min(local_x, rect.right() - self._tail_offset))
+
+        if tail_on_top:
+            # Triangle pointing upwards, base attached to the top edge of rect
+            points = [QPoint(arrow_x - self._tail_offset / 2, rect.top()), QPoint(arrow_x + self._tail_offset / 2, rect.top()), QPoint(arrow_x, rect.top() - self._tail_size)]
+        else:
+            # Triangle pointing downwards, base attached to the bottom edge of rect
+            points = [QPoint(arrow_x - self._tail_offset / 2, rect.bottom()), QPoint(arrow_x + self._tail_offset / 2, rect.bottom()), QPoint(arrow_x, rect.bottom() + self._tail_size)]
+
+        polygon = QPolygon(points)
+        painter.setBrush(QBrush(bubble_color))
+        painter.setPen(border_color)
+        painter.drawPolygon(polygon)
+        painter.end()
+
+    def show(self):
+        anchor_pos = self._global_anchor_point(self._anchor_point.split('-')[0])
+        
+        if self._anchor_point.startswith('top'):
+            y = anchor_pos.y()
+        else:
+            y = anchor_pos.y() - self.height()
+        
+        if self._anchor_point.endswith('right'):
+            x = anchor_pos.x() - self.width() + self._tail_offset
+        elif self._anchor_point.endswith('center'):
+            x = anchor_pos.x() - (self.width() // 2)
+        else:
+            x = anchor_pos.x() - self._tail_offset
+
+        self.move(int(x), int(y))
+        
+        print(self.will_fit())
+
+        super().show()
+    
+    def _global_anchor_point(self, side: str) -> QPoint:
+        match side:
+            case 'top':
+                return self.anchor_btn.mapToGlobal(QPoint(self.anchor_btn.rect().center().x(), self.anchor_btn.rect().bottom()))
+            case    'bottom':
+                return self.anchor_btn.mapToGlobal(QPoint(self.anchor_btn.rect().center().x(), self.anchor_btn.rect().top()))
+            case    'right':
+                return self.anchor_btn.mapToGlobal(QPoint(self.anchor_btn.rect().left(), self.anchor_btn.rect().center().y()))
+            case    'left':
+                return self.anchor_btn.mapToGlobal(QPoint(self.anchor_btn.rect().right(), self.anchor_btn.rect().center().y()))
+            case _:
+                raise ValueError("Invalid side for anchor_point")
+
+    def will_fit(self) -> bool:
+        """Return True if the bubble placed using the current `self._anchor_point`
+        at `anchor_global_point` would be fully inside the application window.
+
+        This is a simple check: it computes the bubble rectangle using the bubble's
+        current size (or minimum size) and the anchor point orientation stored in
+        `self._anchor_point`, then checks whether that rect is contained inside the
+        top-level window geometry (or primary screen available geometry).
+        """
+        frame_rect = self.frameGeometry()
+        print(f"Frame rect: {frame_rect}")
+
+        # Get the top-level window's frame geometry (also global)
+        top_window_rect = self.window().frameGeometry()
+        print(f"Top window rect: {top_window_rect}")
+
+        # Check if the top-level window's rectangle contains the widget's rectangle
+        return top_window_rect.contains(frame_rect)

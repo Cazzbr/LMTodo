@@ -27,9 +27,9 @@ def delete_project(project_id):
 def get_tasks(project_id=None):
 	db = TodoDB()
 	if project_id:
-		return db.fetch_all("SELECT id, title, status, creation_date, due_date, close_date, project_id FROM tasks WHERE project_id=?", (project_id,))
+		return db.fetch_all("SELECT id, title, status, creation_date, due_date, close_date, project_id, comments FROM tasks WHERE project_id=?", (project_id,))
 	else:
-		return db.fetch_all("SELECT id, title, status, creation_date, due_date, close_date, project_id FROM tasks")
+		return db.fetch_all("SELECT id, title, status, creation_date, due_date, close_date, project_id, comments FROM tasks")
 
 def add_task(description, due_date, project_id):
 	db = TodoDB()
@@ -59,3 +59,8 @@ def update_task_status(task_id, new_status):
             "UPDATE tasks SET status='open', close_date=NULL WHERE id=?",
             (task_id,)
         )
+
+def update_task_comments(task_id, comments):
+	"""Persist comments for a task."""
+	db = TodoDB()
+	db.persist("UPDATE tasks SET comments=? WHERE id=?", (comments, task_id))

@@ -34,6 +34,7 @@ class TodoDB:
                     due_date TEXT,
                     close_date TEXT,
                     project_id INTEGER,
+                    comments TEXT,
                     FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
                 )
             """)

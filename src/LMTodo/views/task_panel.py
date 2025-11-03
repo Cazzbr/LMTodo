@@ -67,9 +67,9 @@ class TaskPanel(QFrame):
         self.task_list.clear()
         current_task_filter = self.filter_widget.get_current_filter()  # ["All", "On Time", "Overdue", "Open", "Finished", "Cancelled"]
         self.filtered_tasks = []  # Store filtered tasks
-        for tid, title, status, creation_date, due_date, close_date, pid in self.tasks:
+        for tid, title, status, creation_date, due_date, close_date, pid, comments in self.tasks:
             if self.do_task_must_be_shown(self.get_current_project_id(), current_task_filter, tid, title, status, creation_date, due_date, close_date, pid):
-                self.filtered_tasks.append((tid, title, status, creation_date, due_date, close_date, pid))
+                self.filtered_tasks.append((tid, title, status, creation_date, due_date, close_date, pid, comments))
 
         # Sort filtered_tasks according to selected sort method
         sort_method = "creation"
@@ -91,8 +91,15 @@ class TaskPanel(QFrame):
             order = {"open": 0, "complete": 1, "cancelled": 2}
             self.filtered_tasks.sort(key=lambda t: order.get(t[2], 99))
 
-        for tid, title, status, creation_date, due_date, close_date, pid in self.filtered_tasks:
-            task_widget = TaskWidget(title, status, due_date, close_date, creation_date)
+        for tid, title, status, creation_date, due_date, close_date, pid, comments in self.filtered_tasks:
+            # create a TaskWidget and provide a callback to persist comments when the comment bubble closes
+            def _on_save_comments(tid_arg, text):
+                try:
+                    ThreadRunner(todo_controller.update_task_comments, self.load_tasks, tid_arg, text).start()
+                except Exception:
+                    pass
+
+            task_widget = TaskWidget(tid, title, status, due_date, close_date, creation_date, comments, on_save_comments=_on_save_comments)
             item = QListWidgetItem()
             item.setSizeHint(task_widget.sizeHint())
             self.task_list.addItem(item)
@@ -100,7 +107,7 @@ class TaskPanel(QFrame):
         
         # Restore last selected Task if possible
         if prev_task_id is not None:
-            for index, (tid, _, _, _, _, _, _) in enumerate(self.filtered_tasks):
+            for index, (tid, _, _, _, _, _, _, _) in enumerate(self.filtered_tasks):
                 if tid == prev_task_id:
                     self.task_list.setCurrentRow(index)
                     break
@@ -176,7 +183,7 @@ class TaskPanel(QFrame):
         bubble.show()
 
     def edit_task(self):
-        task_id, title, status, creation_date, due_date, close_date, project_id = self.filtered_tasks[self.task_list.currentRow()]
+        task_id, title, status, creation_date, due_date, close_date, project_id, comments = self.filtered_tasks[self.task_list.currentRow()]
 
         bubble = TaskBubble(
             self,
@@ -203,7 +210,7 @@ class TaskPanel(QFrame):
 
     def delete_task(self):
         # Get task details from filtered tasks
-        task_id, title, status, creation_date, due_date, close_date, project_id = self.filtered_tasks[self.task_list.currentRow()]
+        task_id, title, status, creation_date, due_date, close_date, project_id, comments = self.filtered_tasks[self.task_list.currentRow()]
 
         # Confirmation bubble with two buttons, no input
         bubble = BubbleWidget(
@@ -231,7 +238,7 @@ class TaskPanel(QFrame):
 
     def update_task_status(self, new_status):
         # Get task details from filtered tasks
-        task_id, title, status, creation_date, due_date, close_date, project_id = self.filtered_tasks[self.task_list.currentRow()]
+        task_id, title, status, creation_date, due_date, close_date, project_id, comments = self.filtered_tasks[self.task_list.currentRow()]
 
         if status != new_status:
             # Update the task status
