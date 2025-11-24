@@ -1,7 +1,6 @@
 import locale
-from models.parser import get_config_parser
 
-
+from LMTodo.models.parser import get_config_parser
 
 # Translation dictionaries
 translations = {
@@ -177,12 +176,14 @@ translations = {
     },
 }
 
+
 def get_system_language():
     """Detect the system language and return 'en' or 'pt'."""
     lang_code = locale.getdefaultlocale()[0]
     if lang_code and lang_code.startswith("pt"):
         return "pt"
     return "en"
+
 
 def translate(key):
     """Get the translation for the given key based on the system language."""
@@ -197,4 +198,6 @@ def translate(key):
         lang = "pt"
     else:
         lang = get_system_language()
-    return translations.get(lang, {}).get(key, key)  # Default to key if translation is missing
+    return translations.get(lang, {}).get(
+        key, key
+    )  # Default to key if translation is missing

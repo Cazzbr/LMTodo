@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "LMTodo"
-version = "0.1.0"
+version = "0.1.5"
 description = "A TODO list application in Python"
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -19,10 +19,12 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
     "Operating System :: OS Independent"
 ]
 requires-python = ">=3.10"
+dependencies = [
+    "PySide6",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -33,3 +35,6 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.scripts]
+lmtodo = "LMTodo.main:main"

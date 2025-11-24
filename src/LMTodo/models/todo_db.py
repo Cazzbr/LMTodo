@@ -1,7 +1,7 @@
 import sqlite3
 from contextlib import contextmanager
-from typing import Any, List, Tuple
 from pathlib import Path
+from typing import Any, List, Tuple
 
 
 class TodoDB:
@@ -10,13 +10,12 @@ class TodoDB:
     @staticmethod
     def init_db(db_path=None):
         if db_path is not None:
-            TodoDB.DB_PATH = Path(db_path)  # Ensure the path is updated as a Path object
+            TodoDB.DB_PATH = Path(db_path)
         conn = sqlite3.connect(TodoDB.DB_PATH)
         with conn:
             # Enable foreign key constraints
             conn.execute("PRAGMA foreign_keys = ON;")
 
-            # Create projects table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +23,6 @@ class TodoDB:
                     description TEXT
                 )
             """)
-            # Create tasks table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tasks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,12 +36,21 @@ class TodoDB:
                     FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT NOT NULL,
+                    data BLOB NOT NULL,
+                    task_id INTEGER,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                    )
+                """)
         conn.close()
 
     @contextmanager
     def _get_conn_cursor(self):
-        conn = sqlite3.connect(TodoDB.DB_PATH)  # Dynamically retrieve the database path
-        conn.execute("PRAGMA foreign_keys = ON;")  # Ensure foreign keys are enabled for this connection
+        conn = sqlite3.connect(TodoDB.DB_PATH)
+        conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         try:
             yield conn, cursor
