@@ -27,12 +27,12 @@ class TaskPanel(QFrame):
 
         self.setFrameShape(QFrame.StyledPanel)
         task_layout = QVBoxLayout()
-        # Replace status_label with TaskFilterWidget
+
         self.filter_widget = TaskFilterWidget(self.display_filtered_tasks)
         task_layout.addWidget(self.filter_widget)
         self.task_list = QListWidget()
         task_layout.addWidget(self.task_list)
-        # Bottom bar for task management
+
         task_bar = QHBoxLayout()
         self.add_task_btn = QPushButton("+")
         self.add_task_btn.setToolTip(translate("Add Task"))
@@ -57,11 +57,9 @@ class TaskPanel(QFrame):
         task_layout.addLayout(task_bar)
         self.setLayout(task_layout)
 
-        # Connect task selection changed signal
         self.task_list.itemSelectionChanged.connect(self.set_task_buttons_state)
-        self.set_task_buttons_state()  # Initialize button states
+        self.set_task_buttons_state()
 
-    # Task Methods
     def load_tasks(self, result=None):
         ThreadRunner(todo_controller.get_tasks, self.on_tasks_loaded).start()
 
@@ -70,7 +68,6 @@ class TaskPanel(QFrame):
         self.display_filtered_tasks()
 
     def display_filtered_tasks(self):
-        # Store the currently selected task ID
         prev_task_id = None
         if self.task_list.selectedIndexes():
             prev_task_id = self.filtered_tasks[self.task_list.currentRow()][0]
@@ -79,7 +76,7 @@ class TaskPanel(QFrame):
         current_task_filter = (
             self.filter_widget.get_current_filter()
         )  # ["All", "On Time", "Overdue", "Open", "Finished", "Cancelled"]
-        self.filtered_tasks = []  # Store filtered tasks
+        self.filtered_tasks = []
         for (
             tid,
             title,
@@ -114,7 +111,6 @@ class TaskPanel(QFrame):
                     )
                 )
 
-        # Sort filtered_tasks according to selected sort method
         sort_method = "creation"
         try:
             sort_method = self.filter_widget.get_sort_method()
@@ -122,10 +118,9 @@ class TaskPanel(QFrame):
             sort_method = "creation"
 
         if sort_method == "creation":
-            # Assuming tid (db id) is increasing with creation
             self.filtered_tasks.sort(key=lambda t: t[0])
         elif sort_method == "due":
-            # due_date is YYYY-MM-DD, empty or None should go last
+
             def due_key(t):
                 dd = t[4] or ""
                 return (dd == "", dd)
@@ -145,7 +140,7 @@ class TaskPanel(QFrame):
             pid,
             comments,
         ) in self.filtered_tasks:
-            # create a TaskWidget and provide a callback to persist comments when the comment bubble closes
+
             def _on_save_comments(tid_arg, text):
                 try:
                     ThreadRunner(
@@ -159,6 +154,14 @@ class TaskPanel(QFrame):
 
             task_widget = TaskWidget(
                 self.main_window,
+                next(
+                    (
+                        second
+                        for first, second in self.get_projects_func()
+                        if first == pid
+                    ),
+                    None,
+                ),
                 tid,
                 title,
                 status,
@@ -194,9 +197,7 @@ class TaskPanel(QFrame):
         close_date,
         pid,
     ):
-        if (
-            not current_project_id == None and not current_project_id == pid
-        ):  # Filter for project number
+        if not current_project_id == None and not current_project_id == pid:
             return False
         match current_task_filter:
             case "On Time":

@@ -168,6 +168,7 @@ class TaskWidget(QWidget):
     def __init__(
         self,
         main_window,
+        project_name,
         task_id,
         description,
         status,
@@ -190,6 +191,7 @@ class TaskWidget(QWidget):
 
         # Comments button (opens CommentBubble)
         comment_btn = QPushButton("💬")
+        comment_btn.setStyleSheet("QPushButton { color: green; }") if comments else None
         comment_btn.setToolTip(translate("Comments"))
         comment_btn.setMaximumWidth(36)
         title_row.addWidget(comment_btn)
@@ -247,10 +249,17 @@ class TaskWidget(QWidget):
             if status == "cancelled"
             else "color: #ffaa00; padding: 0px 2px;"
         )
+        project_name_label = QLabel(
+            project_name if len(project_name) <= 16 else project_name[:15]
+        )
+        project_name_label.setAlignment(Qt.AlignCenter)
+        project_name_label.setStyleSheet("color: #cccccc; padding: 0px 2px;")
+
         dates_status_layout.addWidget(creation_date_label)
         dates_status_layout.addWidget(due_date_label)
         dates_status_layout.addWidget(close_date_label)
         dates_status_layout.addWidget(status_label)
+        dates_status_layout.addWidget(project_name_label)
         layout.addLayout(dates_status_layout)
 
         # Separator

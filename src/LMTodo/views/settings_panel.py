@@ -312,8 +312,12 @@ class SettingsPanel(QFrame):
         self.db_path_value_label.setToolTip(
             self.config_parser.get_db_path()
         )  # Add tooltip for full path
+        self.db_path_value_label.setWordWrap(True)
+        self.db_path_value_label.setMaximumWidth(350)
+        self.db_path_value_label.setFixedHeight(0)
+        self.db_path_value_label.setMaximumHeight(16777215)
 
-        layout.addWidget(self.db_path_value_label)
+        layout.addWidget(self.db_path_value_label, 1)
         return layout
 
     def get_shortcut_config_layout(self):
